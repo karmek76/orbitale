@@ -370,7 +370,7 @@ function updateGains(){
 const osc=(type,f)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=f;return o};
 function voice(i,f,time,vel,pan){
   if(active>72)return;
-  const t=S.tracks[i],g=ctx.createGain(),p=ctx.createStereoPanner(),flt=ctx.createBiquadFilter();
+  const t=S.tracks[i],g=ctx.createGain(),p=mkPan(),flt=ctx.createBiquadFilter();
   p.pan.value=clamp(pan,-1,1);flt.connect(g);g.connect(p);p.connect(rt[i].in);
   const a=t.atk,r=t.rel;let peak=.24*vel,end=time+a+r*1.6+.05;const srcs=[];
   flt.type=t.ftype||"lowpass";flt.Q.value=t.res;
@@ -430,7 +430,7 @@ function bq(type,f,q){const b=ctx.createBiquadFilter();b.type=type;b.frequency.v
 function metallic(base,time,dur,dest){const out=[];[2,3,4.16,5.43,6.79,8.21].forEach(r=>{const o=osc("square",base*r);o.connect(dest);o.start(time);o.stop(time+dur);out.push(o)});return out}
 function drumHit(id,L,time,vel){
   if(active>90)return;
-  const tm=Math.pow(2,L.tune/12),d=L.dec,amp=L.lvl*vel,out=ctx.createGain(),p=ctx.createStereoPanner();
+  const tm=Math.pow(2,L.tune/12),d=L.dec,amp=L.lvl*vel,out=ctx.createGain(),p=mkPan();
   p.pan.value=L.pan;out.connect(p);p.connect(drumBus);
   let srcs=[],end=time+.3;
   switch(id){
@@ -494,9 +494,23 @@ function driftStep(t,i){
   if(Math.random()<.22)s.on=!s.on;else s.deg=clamp(s.deg+(Math.random()<.5?-1:1)*(1+Math.floor(Math.random()*2)),0,MAXD);
   dirty[i]=true;
 }
+// pan stereo, con ripiego per browser vecchi senza StereoPannerNode
+function mkPan(){if(ctx.createStereoPanner)return ctx.createStereoPanner();const g=ctx.createGain();g.pan={value:0};return g}
+// sblocco audio su mobile: va chiamato dentro il tocco dell'utente
+const SILENT="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+let silentEl=null;
+function unlockAudio(){
+  try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
+  try{const b=ctx.createBuffer(1,1,22050),src=ctx.createBufferSource();src.buffer=b;src.connect(ctx.destination);src.start(0)}catch(e){}
+  // su iPhone un elemento audio in riproduzione fa suonare il Web Audio anche con l'interruttore silenzioso attivo
+  if(!silentEl){try{silentEl=new Audio(SILENT);silentEl.loop=true;silentEl.setAttribute("playsinline","");const pr=silentEl.play();if(pr)pr.catch(()=>{})}catch(e){}}
+}
+["touchend","pointerup","click"].forEach(ev=>document.addEventListener(ev,()=>{if(ctx&&ctx.state!=="running")ctx.resume().catch(()=>{})},{passive:true}));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&ctx&&playing&&ctx.state!=="running")ctx.resume().catch(()=>{})});
 async function start(){
   if(!ctx)initAudio();
-  if(ctx.state!=="running")await ctx.resume();
+  unlockAudio();
+  if(ctx.state!=="running"){try{await ctx.resume()}catch(e){}}
   const t0=ctx.currentTime+.06;rt.forEach(r=>{r.step=0;r.next=t0;r.cur=-1});drt.forEach(r=>{r.step=0;r.next=t0;r.cur=-1});
   events=[];timer=setInterval(tick,25);tick();playing=true;setPlayUI();
 }
