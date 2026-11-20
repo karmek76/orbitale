@@ -507,10 +507,13 @@ function unlockAudio(){
 }
 ["touchend","pointerup","click"].forEach(ev=>document.addEventListener(ev,()=>{if(ctx&&ctx.state!=="running")ctx.resume().catch(()=>{})},{passive:true}));
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&ctx&&playing&&ctx.state!=="running")ctx.resume().catch(()=>{})});
+window.addEventListener("error",e=>toast("Errore: "+(e.message||"sconosciuto")));
 async function start(){
-  if(!ctx)initAudio();
+  try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
+  try{if(!ctx)initAudio()}catch(e){toast("Audio non disponibile: "+e.message);return}
   unlockAudio();
   if(ctx.state!=="running"){try{await ctx.resume()}catch(e){}}
+  if(ctx.state!=="running")setTimeout(()=>{if(ctx.state!=="running")toast("Audio bloccato dal browser: tocca di nuovo Play")},400);
   const t0=ctx.currentTime+.06;rt.forEach(r=>{r.step=0;r.next=t0;r.cur=-1});drt.forEach(r=>{r.step=0;r.next=t0;r.cur=-1});
   events=[];timer=setInterval(tick,25);tick();playing=true;setPlayUI();
 }
@@ -655,7 +658,7 @@ $("#mutate").onclick=()=>{
     t.steps.forEach(s=>s.deg=Math.floor(Math.random()*10));applyEuclid(t);syncTrack(i);
   });updateRatio();toast("Sequenze mutate");
 };
-let toastT;function toast(m){const el=$("#toast");el.textContent=m;el.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("show"),1400)}
+let toastT;function toast(m){const el=$("#toast");el.textContent=m;el.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("show"),m.startsWith("Err")||m.startsWith("Audio")?5000:1400)}
 
 // rapporto poliritmico e ciclo di riallineamento
 const gcd=(a,b)=>b?gcd(b,a%b):a;
